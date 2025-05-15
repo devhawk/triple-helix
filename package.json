@@ -1,0 +1,10 @@
+{
+  "name": "triple-helix",
+  "version": "1.0.0",
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@dbos-inc/dbos-sdk": "^2.9.30"
+  }
+}
