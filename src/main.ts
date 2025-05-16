@@ -1,5 +1,6 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { randomUUID } from "node:crypto";
+import { NodeDataSource } from "./NodeDataSource";
+import { PoolConfig } from "pg";
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -28,35 +29,41 @@ async function sampleWorkflow(startValue: number): Promise<number> {
 const sWF = DBOS.registerWorkflow(sampleWorkflow, { name: "sampleWorkflow" });
 
 async function main() {
-  DBOS.setConfig({ "name": "triple-helix" });
-  await DBOS.launch();
+  const config: PoolConfig = { database: "triple_helix_app_db", user: "postgres" };
+  await NodeDataSource.ensureDatabase(config, config.database!);
+  await NodeDataSource.configure(config);
+  
 
-  try {
-    let prevStep = 0;
-    const workflowID = randomUUID();
-    const handle = await DBOS.startWorkflowFunction({ workflowID }, sWF, 42);
+  // DBOS.setConfig({ "name": "triple-helix" });
+  // await DBOS.launch();
 
-    while (true) {
-      const status = (await handle.getStatus())?.status;
-      if (status === "SUCCESS" || status === "ERROR") {
-        console.log(`Workflow status: ${status}`);
-        break;
-      }
 
-      const event = await DBOS.getEvent<number>(workflowID, stepsEvent, 1);
-      if (event && event !== prevStep) {
-        console.log(`Workflow event: ${event}`);
-        prevStep = event;
-      } else {
-        await sleep(500);
-      }
-    }
+  // try {
+  //   let prevStep = 0;
+  //   const workflowID = randomUUID();
+  //   const handle = await DBOS.startWorkflowFunction({ workflowID }, sWF, 42);
 
-    const result = await handle.getResult();
-    console.log(`Workflow completed with result: ${result}`);
-  } finally {
-    await DBOS.shutdown();
-  }
+  //   while (true) {
+  //     const status = (await handle.getStatus())?.status;
+  //     if (status === "SUCCESS" || status === "ERROR") {
+  //       console.log(`Workflow status: ${status}`);
+  //       break;
+  //     }
+
+  //     const event = await DBOS.getEvent<number>(workflowID, stepsEvent, 1);
+  //     if (event && event !== prevStep) {
+  //       console.log(`Workflow event: ${event}`);
+  //       prevStep = event;
+  //     } else {
+  //       await sleep(500);
+  //     }
+  //   }
+
+  //   const result = await handle.getResult();
+  //   console.log(`Workflow completed with result: ${result}`);
+  // } finally {
+  //   await DBOS.shutdown();
+  // }
 }
 
 main().catch(console.error);

@@ -1,12 +1,15 @@
 {
   "name": "triple-helix",
   "version": "1.0.0",
-  "type": "module",
+  "type": "commonjs",
   "devDependencies": {
     "@types/node": "^22.15.18",
+    "@types/pg": "^8.15.2",
+    "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@dbos-inc/dbos-sdk": "file:../../ts-transact"
+    "@dbos-inc/dbos-sdk": "file:../../ts-transact",
+    "pg": "^8.16.0"
   }
 }
