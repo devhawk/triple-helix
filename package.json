@@ -1,15 +1,17 @@
 {
   "name": "triple-helix",
   "version": "1.0.0",
-  "type": "commonjs",
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types src/main.ts"
+  },
   "devDependencies": {
     "@types/node": "^22.15.18",
-    "@types/pg": "^8.15.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },
   "dependencies": {
     "@dbos-inc/dbos-sdk": "file:../../ts-transact",
-    "pg": "^8.16.0"
+    "postgres": "^3.4.5"
   }
 }
