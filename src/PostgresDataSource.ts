@@ -25,11 +25,40 @@ export async function dropDB(sql: Sql, name: string) {
 interface PostgresDataSourceContext { client: postgres.TransactionSql<{}>; }
 const asyncLocalCtx = new AsyncLocalStorage<PostgresDataSourceContext>();
 
-class TxOutputDuplicateKeyError extends Error {
-    constructor(message: string) {
-        super(message);
-    }
+class TxOutputDuplicateKeyError extends Error { }
+
+export const IsolationLevel = Object.freeze({
+    serializable: Symbol("serializable"),
+    repeatableRead: Symbol("repeatableRead"),
+    readCommited: Symbol("readCommited"),
+    readUncommitted: Symbol("readUncommitted"),
+});
+
+function getIsolationLevel(isolationLevel: Symbol | undefined): string {
+
+    const $isolationLevel = (function (isolationLevel: Symbol | undefined) {
+        switch (isolationLevel) {
+            case IsolationLevel.serializable:
+                return "SERIALIZABLE";
+            case IsolationLevel.repeatableRead:
+                return "REPEATABLE READ";
+            case IsolationLevel.readUncommitted:
+                return "READ UNCOMMITTED";
+            case IsolationLevel.readCommited:
+                return "READ COMMITTED";
+            case undefined:
+                return undefined;
+            default:
+                throw new Error(`Invalid isolation level: ${isolationLevel}`);
+        }
+    })(isolationLevel);
+
+    return $isolationLevel ? `ISOLATION LEVEL ${$isolationLevel}` : "";
 }
+
+export interface PostgresTransactionOptions {
+    isolationLevel?: Symbol;
+};
 
 export class PostgresDataSource implements DBOSTransactionalDataSource {
 
@@ -46,6 +75,10 @@ export class PostgresDataSource implements DBOSTransactionalDataSource {
         const ctx = asyncLocalCtx.getStore();
         if (!ctx) { throw new Error("No async local context found."); }
         return ctx.client;
+    }
+
+    static async runAsWorkflowTransaction<T>(callback: () => Promise<T>, funcName: string, options: { dsName?: string, config?: PostgresTransactionOptions } = {}) {
+        return await DBOS.runAsWorkflowTransaction(callback, funcName, options);
     }
 
     get dsType(): string {
@@ -69,8 +102,7 @@ export class PostgresDataSource implements DBOSTransactionalDataSource {
     }
 
     async invokeTransactionFunction<This, Args extends unknown[], Return>(
-        reg: unknown | undefined,
-        config: unknown,
+        config: PostgresTransactionOptions,
         target: This,
         func: (this: This, ...args: Args) => Promise<Return>,
         ...args: Args
@@ -80,12 +112,14 @@ export class PostgresDataSource implements DBOSTransactionalDataSource {
         const functionNum = DBOS.stepID;
         if (!functionNum) { throw new Error("Function Number is not set."); }
 
+        const isolationLevel = getIsolationLevel(config.isolationLevel);
+
         while (true) {
             const result = await this.#getResult(workflowID, functionNum);
             if (result) { return JSON.parse(result) as Return; }
 
             try {
-                const output = await this.#db.begin<Return>(async (tx) => {
+                const output = await this.#db.begin<Return>(isolationLevel, async (tx) => {
                     const output = await asyncLocalCtx.run({ client: tx }, async () => {
                         return await func.call(target, ...args);
                     });

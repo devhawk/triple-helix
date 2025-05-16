@@ -1,5 +1,5 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { PostgresDataSource } from "./PostgresDataSource.ts";
+import { IsolationLevel, PostgresDataSource as PGDS } from "./PostgresDataSource.ts";
 import { randomUUID } from "node:crypto";
 
 function sleep(ms: number): Promise<void> {
@@ -19,7 +19,7 @@ async function sampleStep(step: number): Promise<number> {
 
 async function sampleTxStep(step: number): Promise<number> {
   type Result = { step: number };
-  const result = await PostgresDataSource.client<Result[]>`SELECT ${step}::int AS step`;
+  const result = await PGDS.client<Result[]>`SELECT ${step}::int AS step`;
   return result[0].step;
 }
 
@@ -27,7 +27,10 @@ async function sampleWorkflow(startValue: number): Promise<number> {
   let value = startValue;
   for (let i = 1; i < 5; i++) {
     value += await DBOS.runAsWorkflowStep(() => sampleStep(i), `sampleStep${i}`);
-    value += await DBOS.runAsWorkflowTransaction(() => sampleTxStep(i), `sampleTxStep${i}`, "app-db");
+    value += await PGDS.runAsWorkflowTransaction(() => sampleTxStep(i), `sampleTxStep${i}`, {
+      config: { isolationLevel: IsolationLevel.repeatableRead },
+      dsName: "app-db",
+    });
     await DBOS.setEvent(stepsEvent, i);
   }
   return value;
@@ -37,10 +40,10 @@ const registeredSampleWorkflow = DBOS.registerWorkflow(sampleWorkflow, { name: "
 
 async function main() {
   const config = { database: "triple_helix_app_db", user: "postgres" };
-  await PostgresDataSource.ensureDatabase(config.database, { ...config, database: "postgres" });
-  await PostgresDataSource.configure(config);
+  await PGDS.ensureDatabase(config.database, { ...config, database: "postgres" });
+  await PGDS.configure(config);
 
-  const dataSource = new PostgresDataSource(config.database, config);
+  const dataSource = new PGDS(config.database, config);
   DBOS.registerDataSource("app-db", dataSource);
 
   DBOS.setConfig({ "name": "triple-helix" });
