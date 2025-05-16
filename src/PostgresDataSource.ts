@@ -81,6 +81,18 @@ export class PostgresDataSource implements DBOSTransactionalDataSource {
         return await DBOS.runAsWorkflowTransaction(callback, funcName, options);
     }
 
+    async runAsWorkflowTransaction<T>(callback: () => Promise<T>, funcName: string, config?: PostgresTransactionOptions) {
+        return await DBOS.runAsWorkflowTransaction(callback, funcName, { dsName: this.name, config });
+    }
+
+    register<This, Args extends unknown[], Return>(
+        func: (this: This, ...args: Args) => Promise<Return>, 
+        name: string, 
+        config?: PostgresTransactionOptions
+    ): (this: This, ...args: Args) => Promise<Return> {
+        return DBOS.registerTransaction(this.name, func, { name }, config);
+    }
+
     get dsType(): string {
         return "PostgresDataSource";
     }
