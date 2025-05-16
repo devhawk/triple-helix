@@ -2,8 +2,8 @@
 {
   "compilerOptions": {
     "target": "esnext",
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
+    // "experimentalDecorators": true,
+    // "emitDecoratorMetadata": true,
     "module": "Node16",
     "declaration": true,
     "declarationMap": true,
@@ -13,7 +13,8 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "erasableSyntaxOnly": true,
   },
   "include": [
     "src"
