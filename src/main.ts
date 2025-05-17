@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 // configure the app DB data source
 const config = { database: "triple_helix_app_db", user: "postgres" };
 const dataSource = new PGDS("app-db", config);
-DBOS.registerDataSource(dataSource.name, dataSource);
+DBOS.registerDataSource(dataSource);
 
 // helper sleep function
 function sleep(ms: number): Promise<void> { return new Promise(resolve => setTimeout(resolve, ms)); }
