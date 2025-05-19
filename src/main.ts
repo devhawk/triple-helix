@@ -13,45 +13,113 @@ function sleep(ms: number): Promise<void> { return new Promise(resolve => setTim
 // global steps event name so it can be accessed in workflow and main
 const stepsEvent = "steps_event";
 
-// our sample step function
+// query result type reused across multiple sample tx step functions
+type StepQueryResult = { step: number };
+
+// a sample step function
 async function sampleStep(step: number): Promise<number> {
   try {
     await sleep(1000);
     return step;
   } finally {
-      console.log(`Completed step ${step}!`);
+    console.log(`Completed sampleStep ${step}!`);
   }
 }
 
 // registered version of sampleStep
 const registeredSampleStep = DBOS.registerStep(sampleStep, { name: "sampleStep" });
 
-// our sample transaction function
+// a sample transaction function
 async function sampleTxStep(step: number): Promise<number> {
-  type Result = { step: number };
-  const result = await PGDS.client<Result[]>`SELECT ${step}::int AS step`;
-  return result[0].step;
+  try {
+    const result = await PGDS.client<StepQueryResult[]>`SELECT ${step}::int AS step`;
+    return result[0].step;
+  } finally {
+    console.log(`Completed sampleTxStep ${step}!`);
+  }
 }
 
 // registered version of sampleTxStep
 const registeredSampleTxStep = dataSource.register(sampleTxStep, "sampleTxStep", { isolationLevel: IsolationLevel.repeatableRead });
 
-// our sample workflow function
+// a class to demonstrate static step and transaction functions
+class StaticStep {
+  static count = 0;
+  static async sampleStep(step: number): Promise<number> {
+    try {
+      StaticStep.count++;
+      await sleep(1000);
+      return step;
+    } finally {
+      console.log(`Completed StaticStep.sampleStep ${step}!`);
+    }
+  }
+
+  static async sampleTxStep(step: number): Promise<number> {
+    try {
+      StaticStep.count++;
+      const result = await PGDS.client<StepQueryResult[]>`SELECT ${step}::int AS step`;
+      return result[0].step;
+    } finally {
+      console.log(`Completed StaticStep.sampleTxStep ${step}!`);
+    }
+  }
+}
+
+// register static step functions w/o decorators
+StaticStep.sampleStep = DBOS.registerStep(StaticStep.sampleStep, { name: "sampleStep" });
+StaticStep.sampleTxStep = dataSource.register(StaticStep.sampleTxStep, "sampleTxStep", { isolationLevel: IsolationLevel.repeatableRead });
+
+// a sample workflow function
 async function sampleWorkflow(startValue: number): Promise<number> {
   let value = startValue;
+  // let instance = new InstanceStep();
   for (let i = 1; i < 5; i++) {
     // run using the registered step and transaction functions
     value += await registeredSampleStep(i);
     value += await registeredSampleTxStep(i);
+    value += await StaticStep.sampleStep(i);
+    value += await StaticStep.sampleTxStep(i);
 
-    // run step and tx via runAs static methods
-    value += await DBOS.runAsWorkflowStep(() => sampleStep(i), "sampleStep");
-    // run tx using DBOS static method (not type safe)
-    value += await DBOS.runAsWorkflowTransaction(() => sampleTxStep(i), "sampleTxStep", { dsName: dataSource.name, config: { isolationLevel: IsolationLevel.repeatableRead }});
-    // run tx using PostgresDataSource static method (type safe)
-    value += await PostgresDataSource.runTxStep(() => sampleTxStep(i), "sampleTxStep", { dsName: dataSource.name, config: { isolationLevel: IsolationLevel.repeatableRead }});
-    // run tx using dataSource instance method (type safe + no dsName)
-    value += await dataSource.runTxStep(() => sampleTxStep(i), "sampleTxStep", { isolationLevel: IsolationLevel.repeatableRead });
+    // run non transactional step via DBOS static method
+    value += await DBOS.runAsWorkflowStep(async () => {
+      try {
+        await sleep(1000);
+        return i;
+      } finally {
+        console.log(`Completed DBOS.runAsWorkflowStep ${i}!`);
+      }
+    }, "DBOS.runAsWorkflowStep");
+
+    // run tx step via DBOS static method (have to specify DS name, config not type safe)
+    value += await DBOS.runAsWorkflowTransaction(async () => {
+      try {
+        const result = await PGDS.client<StepQueryResult[]>`SELECT ${i}::int AS step`;
+        return result[0].step;
+      } finally {
+        console.log(`Completed DBOS.runAsWorkflowTransaction ${i}!`);
+      }
+    }, "DBOS.runAsWorkflowTransaction", { dsName: dataSource.name, config: { isolationLevel: IsolationLevel.repeatableRead } });
+
+    // run tx step using PostgresDataSource static method (have to specify DS name, config type safe)
+    value += await PostgresDataSource.runTxStep(async () => {
+      try {
+        const result = await PGDS.client<StepQueryResult[]>`SELECT ${i}::int AS step`;
+        return result[0].step;
+      } finally {
+        console.log(`Completed PostgresDataSource.runTxStep ${i}!`);
+      }
+    }, "PostgresDataSource.runTxStep", { dsName: dataSource.name, config: { isolationLevel: IsolationLevel.repeatableRead } });
+
+    // run tx step using PostgresDataSource instance method (don't specify DS name, config type safe)
+    value += await dataSource.runTxStep(async () => {
+      try {
+        const result = await PGDS.client<StepQueryResult[]>`SELECT ${i}::int AS step`;
+        return result[0].step;
+      } finally {
+        console.log(`Completed dataSource.runTxStep ${i}!`);
+      }
+    }, "dataSource.runTxStep", { isolationLevel: IsolationLevel.repeatableRead });
 
     // communicate progress via event
     await DBOS.setEvent(stepsEvent, i);
@@ -74,7 +142,7 @@ async function main() {
   try {
     // run the workflow
     const workflowID = randomUUID();
-    const handle = await DBOS.startWorkflowFunction({ workflowID }, registeredSampleWorkflow, 42);
+    const handle = await DBOS.startWorkflowFunction({ workflowID }, registeredSampleWorkflow, 0);
 
     // log workflow events to the console
     let prevStep = 0;
