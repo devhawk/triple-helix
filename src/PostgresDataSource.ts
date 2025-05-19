@@ -2,6 +2,7 @@ import postgres, { type Sql } from "postgres";
 import { DBOS, type DBOSTransactionalDataSource } from "@dbos-inc/dbos-sdk";
 import { AsyncLocalStorage } from "node:async_hooks";
 
+// helper functions to create/drop the database
 async function checkDB(sql: Sql, name: string) {
     const results =
         await sql/*sql*/ `SELECT 1 FROM pg_database WHERE datname = ${name}`.values();

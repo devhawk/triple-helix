@@ -1,5 +1,5 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { IsolationLevel, PostgresDataSource as PGDS } from "./PostgresDataSource.ts";
+import { IsolationLevel, PostgresDataSource as PGDS, PostgresDataSource } from "./PostgresDataSource.ts";
 import { randomUUID } from "node:crypto";
 
 // configure the app DB data source
@@ -46,6 +46,11 @@ async function sampleWorkflow(startValue: number): Promise<number> {
 
     // run step and tx via runAs static methods
     value += await DBOS.runAsWorkflowStep(() => sampleStep(i), "sampleStep");
+    // run tx using DBOS static method (not type safe)
+    value += await DBOS.runAsWorkflowTransaction(() => sampleTxStep(i), "sampleTxStep", { dsName: dataSource.name, config: { isolationLevel: IsolationLevel.repeatableRead }});
+    // run tx using PostgresDataSource static method (type safe)
+    value += await PostgresDataSource.runAsWorkflowTransaction(() => sampleTxStep(i), "sampleTxStep", { dsName: dataSource.name, config: { isolationLevel: IsolationLevel.repeatableRead }});
+    // run tx using dataSource instance method (type safe + no dsName)
     value += await dataSource.runAsWorkflowTransaction(() => sampleTxStep(i), "sampleTxStep", { isolationLevel: IsolationLevel.repeatableRead });
 
     // communicate progress via event
