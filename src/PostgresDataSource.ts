@@ -78,11 +78,11 @@ export class PostgresDataSource implements DBOSTransactionalDataSource {
         return ctx.client;
     }
 
-    static async runAsWorkflowTransaction<T>(callback: () => Promise<T>, funcName: string, options: { dsName?: string, config?: PostgresTransactionOptions } = {}) {
+    static async runTxStep<T>(callback: () => Promise<T>, funcName: string, options: { dsName?: string, config?: PostgresTransactionOptions } = {}) {
         return await DBOS.runAsWorkflowTransaction(callback, funcName, options);
     }
 
-    async runAsWorkflowTransaction<T>(callback: () => Promise<T>, funcName: string, config?: PostgresTransactionOptions) {
+    async runTxStep<T>(callback: () => Promise<T>, funcName: string, config?: PostgresTransactionOptions) {
         return await DBOS.runAsWorkflowTransaction(callback, funcName, { dsName: this.name, config });
     }
 
