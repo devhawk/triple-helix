@@ -142,7 +142,10 @@ export class PostgresDataSource implements DBOSTransactionalDataSource {
                             INSERT INTO dbos.transaction_outputs (workflow_id, function_num, output)
                             VALUES (${workflowID}, ${functionNum}, ${JSON.stringify(output)})`;
                     } catch (e) {
+                        // 23505 is a duplicate key error 
                         if (e instanceof postgres.PostgresError && e.code === "23505") {
+                            // I dislike using try/catch for flow control, but we need to throw an error here
+                            // in order to trigger transacation rollback
                             throw new TxOutputDuplicateKeyError("Duplicate key error");
                         } else {
                             throw e;
