@@ -31,36 +31,17 @@ const asyncLocalCtx = new AsyncLocalStorage<PostgresDataSourceContext>();
 class TxOutputDuplicateKeyError extends Error { }
 
 export const IsolationLevel = Object.freeze({
-    serializable: Symbol("serializable"),
-    repeatableRead: Symbol("repeatableRead"),
-    readCommited: Symbol("readCommited"),
-    readUncommitted: Symbol("readUncommitted"),
+    serializable: 'SERIALIZABLE',
+    repeatableRead: 'REPEATABLE READ',
+    readCommited: 'READ COMMITTED',
+    readUncommitted: 'READ UNCOMMITTED',
 });
 
-function getIsolationLevel(isolationLevel: Symbol | undefined): string {
-
-    const $isolationLevel = (function (isolationLevel: Symbol | undefined) {
-        switch (isolationLevel) {
-            case IsolationLevel.serializable:
-                return "SERIALIZABLE";
-            case IsolationLevel.repeatableRead:
-                return "REPEATABLE READ";
-            case IsolationLevel.readUncommitted:
-                return "READ UNCOMMITTED";
-            case IsolationLevel.readCommited:
-                return "READ COMMITTED";
-            case undefined:
-                return undefined;
-            default:
-                throw new Error(`Invalid isolation level: ${isolationLevel}`);
-        }
-    })(isolationLevel);
-
-    return $isolationLevel ? `ISOLATION LEVEL ${$isolationLevel}` : "";
-}
+type ValuesOf<T> = T[keyof T];
+type IsolationLevel = ValuesOf<typeof IsolationLevel>;
 
 export interface PostgresTransactionOptions {
-    isolationLevel?: Symbol;
+    isolationLevel?: IsolationLevel;
 };
 
 export class PostgresDataSource implements DBOSTransactionalDataSource {
@@ -123,11 +104,11 @@ export class PostgresDataSource implements DBOSTransactionalDataSource {
         ...args: Args
     ): Promise<Return> {
         const workflowID = DBOS.workflowID;
-        if (!workflowID) { throw new Error("Workflow ID is not set."); }
         const functionNum = DBOS.stepID;
-        if (!functionNum) { throw new Error("Function Number is not set."); }
+        const isolationLevel = config.isolationLevel ? `ISOLATION LEVEL ${config.isolationLevel}` : "";
 
-        const isolationLevel = getIsolationLevel(config.isolationLevel);
+        if (!workflowID) { throw new Error("Workflow ID is not set."); }
+        if (!functionNum) { throw new Error("Function Number is not set."); }
 
         while (true) {
             const result = await this.#getResult(workflowID, functionNum);

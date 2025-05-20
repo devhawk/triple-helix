@@ -38,7 +38,7 @@ async function sampleTxStep(step: number): Promise<number> {
 
 // registered versions of sampleStep & sampleTxStep
 const registeredSampleStep = DBOS.registerStep(sampleStep, { name: "sampleStep" });
-const registeredSampleTxStep = dataSource.register(sampleTxStep, "sampleTxStep", { isolationLevel: IsolationLevel.repeatableRead });
+const registeredSampleTxStep = dataSource.register(sampleTxStep, "sampleTxStep", { isolationLevel: IsolationLevel.readUncommitted });
 
 // a class to demonstrate static step and transaction functions
 class StaticStep {
@@ -66,7 +66,7 @@ class StaticStep {
 
 // register static step functions w/o decorators
 StaticStep.sampleStep = DBOS.registerStep(StaticStep.sampleStep, { name: "StaticStep.sampleStep" });
-StaticStep.sampleTxStep = dataSource.register(StaticStep.sampleTxStep, "StaticStep.sampleTxStep", { isolationLevel: IsolationLevel.repeatableRead });
+StaticStep.sampleTxStep = dataSource.register(StaticStep.sampleTxStep, "StaticStep.sampleTxStep", { isolationLevel: IsolationLevel.readCommited });
 
 // a class to demonstrate instance step and transaction functions
 class InstanceStep {
@@ -128,7 +128,7 @@ async function sampleWorkflow(startValue: number): Promise<number> {
       } finally {
         console.log(`Completed DBOS.runAsWorkflowTransaction ${i}!`);
       }
-    }, "DBOS.runAsWorkflowTransaction", { dsName: dataSource.name, config: { isolationLevel: IsolationLevel.repeatableRead } });
+    }, "DBOS.runAsWorkflowTransaction", { dsName: dataSource.name });
 
     // run tx step using PostgresDataSource static method (have to specify DS name, config type safe)
     value += await PostgresDataSource.runTxStep(async () => {
@@ -138,7 +138,7 @@ async function sampleWorkflow(startValue: number): Promise<number> {
       } finally {
         console.log(`Completed PostgresDataSource.runTxStep ${i}!`);
       }
-    }, "PostgresDataSource.runTxStep", { dsName: dataSource.name, config: { isolationLevel: IsolationLevel.repeatableRead } });
+    }, "PostgresDataSource.runTxStep", { dsName: dataSource.name });
 
     // run tx step using PostgresDataSource instance method (don't specify DS name, config type safe)
     value += await dataSource.runTxStep(async () => {
@@ -148,7 +148,7 @@ async function sampleWorkflow(startValue: number): Promise<number> {
       } finally {
         console.log(`Completed dataSource.runTxStep ${i}!`);
       }
-    }, "dataSource.runTxStep", { isolationLevel: IsolationLevel.repeatableRead });
+    }, "dataSource.runTxStep", { isolationLevel: IsolationLevel.serializable });
 
     // communicate progress via event
     await DBOS.setEvent(stepsEvent, i);
