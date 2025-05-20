@@ -26,9 +26,6 @@ async function sampleStep(step: number): Promise<number> {
   }
 }
 
-// registered version of sampleStep
-const registeredSampleStep = DBOS.registerStep(sampleStep, { name: "sampleStep" });
-
 // a sample transaction function
 async function sampleTxStep(step: number): Promise<number> {
   try {
@@ -39,7 +36,8 @@ async function sampleTxStep(step: number): Promise<number> {
   }
 }
 
-// registered version of sampleTxStep
+// registered versions of sampleStep & sampleTxStep
+const registeredSampleStep = DBOS.registerStep(sampleStep, { name: "sampleStep" });
 const registeredSampleTxStep = dataSource.register(sampleTxStep, "sampleTxStep", { isolationLevel: IsolationLevel.repeatableRead });
 
 // a class to demonstrate static step and transaction functions
@@ -67,8 +65,8 @@ class StaticStep {
 }
 
 // register static step functions w/o decorators
-StaticStep.sampleStep = DBOS.registerStep(StaticStep.sampleStep, { name: "sampleStep" });
-StaticStep.sampleTxStep = dataSource.register(StaticStep.sampleTxStep, "sampleTxStep", { isolationLevel: IsolationLevel.repeatableRead });
+StaticStep.sampleStep = DBOS.registerStep(StaticStep.sampleStep, { name: "StaticStep.sampleStep" });
+StaticStep.sampleTxStep = dataSource.register(StaticStep.sampleTxStep, "StaticStep.sampleTxStep", { isolationLevel: IsolationLevel.repeatableRead });
 
 // a class to demonstrate instance step and transaction functions
 class InstanceStep {
@@ -95,8 +93,8 @@ class InstanceStep {
 }
 
 // register instance step functions w/o decorators
-InstanceStep.prototype.sampleStep = DBOS.registerStep(InstanceStep.prototype.sampleStep, { name: "sampleStep" });
-InstanceStep.prototype.sampleTxStep = dataSource.register(InstanceStep.prototype.sampleTxStep, "sampleTxStep", { isolationLevel: IsolationLevel.repeatableRead });
+InstanceStep.prototype.sampleStep = DBOS.registerStep(InstanceStep.prototype.sampleStep, { name: "InstanceStep.sampleStep" });
+InstanceStep.prototype.sampleTxStep = dataSource.register(InstanceStep.prototype.sampleTxStep, "InstanceStep.sampleTxStep", { isolationLevel: IsolationLevel.repeatableRead });
 
 // a sample workflow function
 async function sampleWorkflow(startValue: number): Promise<number> {
