@@ -70,16 +70,46 @@ class StaticStep {
 StaticStep.sampleStep = DBOS.registerStep(StaticStep.sampleStep, { name: "sampleStep" });
 StaticStep.sampleTxStep = dataSource.register(StaticStep.sampleTxStep, "sampleTxStep", { isolationLevel: IsolationLevel.repeatableRead });
 
+class InstanceStep {
+  count = 0;
+  async sampleStep(step: number): Promise<number> {
+    try {
+      this.count++;
+      await sleep(1000);
+      return step;
+    } finally {
+      console.log(`Completed InstanceStep.sampleStep ${step}!`);
+    }
+  }
+
+  async sampleTxStep(step: number): Promise<number> {
+    try {
+      this.count++;
+      const result = await PGDS.client<StepQueryResult[]>`SELECT ${step}::int AS step`;
+      return result[0].step;
+    } finally {
+      console.log(`Completed InstanceStep.sampleTxStep ${step}!`);
+    }
+  }
+}
+
+InstanceStep.prototype.sampleStep = DBOS.registerStep(InstanceStep.prototype.sampleStep, { name: "sampleStep" });
+InstanceStep.prototype.sampleTxStep = dataSource.register(InstanceStep.prototype.sampleTxStep, "sampleTxStep", { isolationLevel: IsolationLevel.repeatableRead });
+
+
 // a sample workflow function
 async function sampleWorkflow(startValue: number): Promise<number> {
   let value = startValue;
-  // let instance = new InstanceStep();
+  let instance = new InstanceStep();
+
   for (let i = 1; i < 5; i++) {
     // run using the registered step and transaction functions
     value += await registeredSampleStep(i);
     value += await registeredSampleTxStep(i);
     value += await StaticStep.sampleStep(i);
     value += await StaticStep.sampleTxStep(i);
+    value += await instance.sampleStep(i);
+    value += await instance.sampleTxStep(i);
 
     // run non transactional step via DBOS static method
     value += await DBOS.runAsWorkflowStep(async () => {
@@ -124,6 +154,9 @@ async function sampleWorkflow(startValue: number): Promise<number> {
     // communicate progress via event
     await DBOS.setEvent(stepsEvent, i);
   }
+
+  console.log(`StaticStep count: ${StaticStep.count}`);
+  console.log(`InstanceStep count: ${instance.count}`);
   return value;
 }
 
