@@ -12,10 +12,9 @@ export const IsolationLevel = Object.freeze({
 });
 
 type ValuesOf<T> = T[keyof T];
-type IsolationLevel = ValuesOf<typeof IsolationLevel>;
 
 export interface NodePostgresTransactionOptions {
-    isolationLevel?: IsolationLevel;
+    isolationLevel?: ValuesOf<typeof IsolationLevel>;
 };
 
 interface NodePostgresDataSourceContext { client: ClientBase; }
@@ -23,6 +22,7 @@ const asyncLocalCtx = new AsyncLocalStorage<NodePostgresDataSourceContext>();
 
 export class NodePostgresDataSource implements DBOSTransactionalDataSource {
     readonly name: string;
+    readonly dsType = "NodePostgresDataSource";
     readonly #pool: Pool;
 
     constructor(name: string, config: PoolConfig) {
@@ -51,10 +51,6 @@ export class NodePostgresDataSource implements DBOSTransactionalDataSource {
         config?: NodePostgresTransactionOptions
     ): (this: This, ...args: Args) => Promise<Return> {
         return DBOS.registerTransaction(this.name, func, { name }, config);
-    }
-
-    get dsType(): string {
-        return "NodePostgresDataSource";
     }
 
     initialize(): Promise<void> {

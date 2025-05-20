@@ -4,7 +4,6 @@ import postgres, { type Sql } from "postgres";
 import { DBOS, type DBOSTransactionalDataSource } from "@dbos-inc/dbos-sdk";
 import { AsyncLocalStorage } from "node:async_hooks";
 
-
 interface PostgresDataSourceContext { client: postgres.TransactionSql<{}>; }
 const asyncLocalCtx = new AsyncLocalStorage<PostgresDataSourceContext>();
 
@@ -18,15 +17,14 @@ export const IsolationLevel = Object.freeze({
 });
 
 type ValuesOf<T> = T[keyof T];
-type IsolationLevel = ValuesOf<typeof IsolationLevel>;
 
 export interface PostgresTransactionOptions {
-    isolationLevel?: IsolationLevel;
+    isolationLevel?: ValuesOf<typeof IsolationLevel>;
 };
 
 export class PostgresDataSource implements DBOSTransactionalDataSource {
-
     readonly name: string;
+    readonly dsType = "PostgresDataSource";
     readonly #db: Sql;
 
     constructor(name: string, options: postgres.Options<{}> = {}) {
@@ -55,10 +53,6 @@ export class PostgresDataSource implements DBOSTransactionalDataSource {
         config?: PostgresTransactionOptions
     ): (this: This, ...args: Args) => Promise<Return> {
         return DBOS.registerTransaction(this.name, func, { name }, config);
-    }
-
-    get dsType(): string {
-        return "PostgresDataSource";
     }
 
     initialize(): Promise<void> {
