@@ -1,7 +1,7 @@
 // using https://github.com/brianc/node-postgres
 
 import { DBOS, type DBOSTransactionalDataSource } from "@dbos-inc/dbos-sdk";
-import { Client, ClientBase, type ClientConfig, DatabaseError, Pool, type PoolConfig } from "pg";
+import { Client, type ClientBase, type ClientConfig, DatabaseError, Pool, type PoolConfig } from "pg";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 export const IsolationLevel = Object.freeze({
@@ -126,31 +126,32 @@ export class NodePostgresDataSource implements DBOSTransactionalDataSource {
         }
     }
 
-        static async ensureDatabase(name: string, config: ClientConfig): Promise<void> {
-            const client = new Client(config);
-            try {
-                await ensureDB(client, name);
-            } finally {
-                await client.end();
-            }
+    static async ensureDatabase(name: string, config: ClientConfig): Promise<void> {
+        const client = new Client(config);
+        try {
+            await client.connect();
+            await ensureDB(client, name);
+        } finally {
+            await client.end();
         }
-    
-        static async configure(config: ClientConfig): Promise<void> {
-            const client = new Client(config);
-            try {
-                await client.query(/*sql*/
-                    `CREATE SCHEMA IF NOT EXISTS dbos;
+    }
+
+    static async configure(config: ClientConfig): Promise<void> {
+        const client = new Client(config);
+        try {
+            await client.connect();
+            await client.query(/*sql*/
+                `CREATE SCHEMA IF NOT EXISTS dbos;
                      CREATE TABLE IF NOT EXISTS dbos.transaction_outputs (
                         workflow_id TEXT NOT NULL,
                         function_num INT NOT NULL,
                         output TEXT,
                         created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now())*1000)::bigint,
                         PRIMARY KEY (workflow_id, function_num));`);
-            } finally {
-                await client.end();
-            }
+        } finally {
+            await client.end();
         }
-    
+    }
 }
 
 // helper functions to create/drop the database
