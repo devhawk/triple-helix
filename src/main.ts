@@ -70,6 +70,7 @@ class StaticStep {
 StaticStep.sampleStep = DBOS.registerStep(StaticStep.sampleStep, { name: "sampleStep" });
 StaticStep.sampleTxStep = dataSource.register(StaticStep.sampleTxStep, "sampleTxStep", { isolationLevel: IsolationLevel.repeatableRead });
 
+// a class to demonstrate instance step and transaction functions
 class InstanceStep {
   count = 0;
   async sampleStep(step: number): Promise<number> {
@@ -93,9 +94,9 @@ class InstanceStep {
   }
 }
 
+// register instance step functions w/o decorators
 InstanceStep.prototype.sampleStep = DBOS.registerStep(InstanceStep.prototype.sampleStep, { name: "sampleStep" });
 InstanceStep.prototype.sampleTxStep = dataSource.register(InstanceStep.prototype.sampleTxStep, "sampleTxStep", { isolationLevel: IsolationLevel.repeatableRead });
-
 
 // a sample workflow function
 async function sampleWorkflow(startValue: number): Promise<number> {
