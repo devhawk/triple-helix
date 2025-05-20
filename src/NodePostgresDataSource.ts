@@ -13,8 +13,9 @@ export const IsolationLevel = Object.freeze({
 
 type ValuesOf<T> = T[keyof T];
 
+type IsolationLevel = ValuesOf<typeof IsolationLevel>;
 export interface NodePostgresTransactionOptions {
-    isolationLevel?: ValuesOf<typeof IsolationLevel>;
+    isolationLevel?: IsolationLevel;
 };
 
 interface NodePostgresDataSourceContext { client: ClientBase; }
@@ -61,17 +62,6 @@ export class NodePostgresDataSource implements DBOSTransactionalDataSource {
         return this.#pool.end();
     }
 
-    async #getResult(workflowID: string, functionNum: number): Promise<string | undefined> {
-        type Result = { output: string };
-        const result = await this.#pool.query<Result>(/*sql*/
-            `SELECT output FROM dbos.transaction_outputs
-             WHERE workflow_id = $1 AND function_num = $2`,
-            [workflowID, functionNum]);
-        return result.rows.length > 0
-            ? result.rows[0].output
-            : undefined;
-    }
-
     async invokeTransactionFunction<This, Args extends unknown[], Return>(
         config: NodePostgresTransactionOptions,
         target: This,
@@ -80,46 +70,11 @@ export class NodePostgresDataSource implements DBOSTransactionalDataSource {
     ): Promise<Return> {
         const workflowID = DBOS.workflowID;
         const functionNum = DBOS.stepID;
-        const isolationLevel = config.isolationLevel ? /*sql*/`ISOLATION LEVEL ${config.isolationLevel}` : "";
 
         if (!workflowID) { throw new Error("Workflow ID is not set."); }
         if (!functionNum) { throw new Error("Function Number is not set."); }
 
-        while (true) {
-            const result = await this.#getResult(workflowID, functionNum);
-            if (result) { return JSON.parse(result) as Return; }
-
-            const client = await this.#pool.connect();
-            try {
-                await client.query(/*sql*/`BEGIN ${isolationLevel}`);
-
-                const output = await asyncLocalCtx.run({ client }, async () => {
-                    return await func.call(target, ...args);
-                });
-
-                try {
-                    await client.query(/*sql*/
-                        `INSERT INTO dbos.transaction_outputs (workflow_id, function_num, output) VALUES ($1, $2, $3)`,
-                        [workflowID, functionNum, JSON.stringify(output)]);
-                } catch (error) {
-                    // 23505 is a duplicate key error 
-                    if (error instanceof DatabaseError && error.code === "23505") {
-                        await client.query(/*sql*/`ROLLBACK`);
-                        continue;
-                    } else {
-                        throw error;
-                    }
-                }
-
-                await client.query(/*sql*/`COMMIT`);
-                return output;
-            } catch (error) {
-                await client.query(/*sql*/`ROLLBACK`);
-                throw error;
-            } finally {
-                client.release();
-            }
-        }
+        return runLocal(this.#pool, () => func.call(target, ...args), workflowID, functionNum, config.isolationLevel);
     }
 
     static async ensureDatabase(name: string, config: ClientConfig): Promise<void> {
@@ -146,6 +101,49 @@ export class NodePostgresDataSource implements DBOSTransactionalDataSource {
                         PRIMARY KEY (workflow_id, function_num));`);
         } finally {
             await client.end();
+        }
+    }
+}
+
+async function runLocal<Return>(pool: Pool, func: () => Promise<Return>, workflowID: string, functionNum: number, isolationLevel?: IsolationLevel) {
+    const $isolationLevel = isolationLevel ? /*sql*/`ISOLATION LEVEL ${isolationLevel}` : "";
+
+    while (true) {
+        const { rows } = await pool.query<{ output: string }>(/*sql*/
+            `SELECT output FROM dbos.transaction_outputs
+             WHERE workflow_id = $1 AND function_num = $2`,
+            [workflowID, functionNum]);
+        if (rows.length > 0) {
+            return JSON.parse(rows[0].output) as Return;
+        }
+
+        const client = await pool.connect();
+        try {
+            await client.query(/*sql*/`BEGIN ${$isolationLevel}`);
+
+            const output = await asyncLocalCtx.run({ client }, func);
+
+            try {
+                await client.query(/*sql*/
+                    `INSERT INTO dbos.transaction_outputs (workflow_id, function_num, output) VALUES ($1, $2, $3)`,
+                    [workflowID, functionNum, JSON.stringify(output)]);
+            } catch (error) {
+                // 23505 is a duplicate key error 
+                if (error instanceof DatabaseError && error.code === "23505") {
+                    await client.query(/*sql*/`ROLLBACK`);
+                    continue;
+                } else {
+                    throw error;
+                }
+            }
+
+            await client.query(/*sql*/`COMMIT`);
+            return output;
+        } catch (error) {
+            await client.query(/*sql*/`ROLLBACK`);
+            throw error;
+        } finally {
+            client.release();
         }
     }
 }
