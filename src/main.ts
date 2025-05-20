@@ -1,5 +1,5 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { IsolationLevel, PostgresDataSource as PGDS, PostgresDataSource } from "./PostgresDataSource.ts";
+import { IsolationLevel, PostgresDataSource as PGDS } from "./PostgresDataSource.ts";
 import { randomUUID } from "node:crypto";
 
 // configure the app DB data source
@@ -131,7 +131,7 @@ async function sampleWorkflow(startValue: number): Promise<number> {
     }, "DBOS.runAsWorkflowTransaction", { dsName: dataSource.name });
 
     // run tx step using PostgresDataSource static method (have to specify DS name, config type safe)
-    value += await PostgresDataSource.runTxStep(async () => {
+    value += await PGDS.runTxStep(async () => {
       try {
         const result = await PGDS.client<StepQueryResult[]>`SELECT ${i}::int AS step`;
         return result[0].step;
