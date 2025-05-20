@@ -4,26 +4,6 @@ import postgres, { type Sql } from "postgres";
 import { DBOS, type DBOSTransactionalDataSource } from "@dbos-inc/dbos-sdk";
 import { AsyncLocalStorage } from "node:async_hooks";
 
-// helper functions to create/drop the database
-async function checkDB(sql: Sql, name: string) {
-    const results =
-        await sql/*sql*/ `SELECT 1 FROM pg_database WHERE datname = ${name}`.values();
-    return results.length > 0;
-}
-
-export async function ensureDB(sql: Sql, name: string) {
-    const exists = await checkDB(sql, name);
-    if (!exists) {
-        await sql.unsafe(/*sql*/ `CREATE DATABASE ${name}`).simple();
-    }
-}
-
-export async function dropDB(sql: Sql, name: string) {
-    const exists = await checkDB(sql, name);
-    if (exists) {
-        await sql.unsafe(/*sql*/ `DROP DATABASE ${name}`).simple();
-    }
-}
 
 interface PostgresDataSourceContext { client: postgres.TransactionSql<{}>; }
 const asyncLocalCtx = new AsyncLocalStorage<PostgresDataSourceContext>();
@@ -115,23 +95,23 @@ export class PostgresDataSource implements DBOSTransactionalDataSource {
             if (result) { return JSON.parse(result) as Return; }
 
             try {
-                const output = await this.#db.begin<Return>(isolationLevel, async (tx) => {
-                    const output = await asyncLocalCtx.run({ client: tx }, async () => {
+                const output = await this.#db.begin<Return>(isolationLevel, async (client) => {
+                    const output = await asyncLocalCtx.run({ client }, async () => {
                         return await func.call(target, ...args);
                     });
 
                     try {
-                        await tx/*sql*/`
+                        await client/*sql*/`
                             INSERT INTO dbos.transaction_outputs (workflow_id, function_num, output)
                             VALUES (${workflowID}, ${functionNum}, ${JSON.stringify(output)})`;
-                    } catch (e) {
+                    } catch (error) {
                         // 23505 is a duplicate key error 
-                        if (e instanceof postgres.PostgresError && e.code === "23505") {
+                        if (error instanceof postgres.PostgresError && error.code === "23505") {
                             // I dislike using try/catch for flow control, but we need to throw an error here
                             // in order to trigger transacation rollback
                             throw new TxOutputDuplicateKeyError("Duplicate key error");
                         } else {
-                            throw e;
+                            throw error;
                         }
                     }
 
@@ -172,5 +152,26 @@ export class PostgresDataSource implements DBOSTransactionalDataSource {
         } finally {
             await pg.end();
         }
+    }
+}
+
+// helper functions to create/drop the database
+async function checkDB(sql: Sql, name: string) {
+    const results =
+        await sql/*sql*/ `SELECT 1 FROM pg_database WHERE datname = ${name}`.values();
+    return results.length > 0;
+}
+
+export async function ensureDB(sql: Sql, name: string) {
+    const exists = await checkDB(sql, name);
+    if (!exists) {
+        await sql.unsafe(/*sql*/ `CREATE DATABASE ${name}`).simple();
+    }
+}
+
+export async function dropDB(sql: Sql, name: string) {
+    const exists = await checkDB(sql, name);
+    if (exists) {
+        await sql.unsafe(/*sql*/ `DROP DATABASE ${name}`).simple();
     }
 }
