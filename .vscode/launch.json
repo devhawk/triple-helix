@@ -15,6 +15,7 @@
             "runtimeArgs": [
                 "--experimental-strip-types"
             ],
+            "args": ["npg"],
             "outFiles": [
                 "${workspaceFolder}/**/*.js"
             ]

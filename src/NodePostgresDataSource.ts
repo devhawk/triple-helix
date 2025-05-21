@@ -1,7 +1,7 @@
 // using https://github.com/brianc/node-postgres
 
 import { DBOS, type DBOSTransactionalDataSource } from "@dbos-inc/dbos-sdk";
-import { Client, type ClientBase, type ClientConfig, DatabaseError, Pool, type PoolConfig, QueryResultRow } from "pg";
+import { Client, type ClientBase, type ClientConfig, DatabaseError, Pool, type PoolConfig, type QueryResultRow } from "pg";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { NoticeMessage } from "pg-protocol/dist/messages.js";
 

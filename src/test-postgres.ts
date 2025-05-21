@@ -1,10 +1,10 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
-import { IsolationLevel, NodePostgresDataSource as NPGDS } from "./NodePostgresDataSource.ts";
+import { IsolationLevel, PostgresDataSource as PGDS } from "./PostgresDataSource.ts";
 import { randomUUID } from "node:crypto";
 
 // configure the app DB data source
 const config = { database: "triple_helix_app_db", user: "postgres" };
-const dataSource = new NPGDS("app-db", config);
+const dataSource = new PGDS("app-db", config);
 DBOS.registerDataSource(dataSource);
 
 // helper sleep function
@@ -29,8 +29,8 @@ async function sampleStep(step: number): Promise<number> {
 // a sample transaction function
 async function sampleTxStep(step: number): Promise<number> {
   try {
-    const result = await NPGDS.client.query<StepQueryResult>(`SELECT $1::int AS step`, [step]);
-    return result.rows[0].step;
+    const result = await PGDS.client<StepQueryResult[]>`SELECT ${step}::int AS step`;
+    return result[0].step;
   } finally {
     console.log(`Completed sampleTxStep ${step}!`);
   }
@@ -56,8 +56,8 @@ class StaticStep {
   static async sampleTxStep(step: number): Promise<number> {
     try {
       StaticStep.count++;
-      const result = await NPGDS.client.query<StepQueryResult>(`SELECT $1::int AS step`, [step]);
-      return result.rows[0].step;
+      const result = await PGDS.client<StepQueryResult[]>`SELECT ${step}::int AS step`;
+      return result[0].step;
     } finally {
       console.log(`Completed StaticStep.sampleTxStep ${step}!`);
     }
@@ -84,8 +84,8 @@ class InstanceStep {
   async sampleTxStep(step: number): Promise<number> {
     try {
       this.count++;
-      const result = await NPGDS.client.query<StepQueryResult>(`SELECT $1::int AS step`, [step]);
-      return result.rows[0].step;
+      const result = await PGDS.client<StepQueryResult[]>`SELECT ${step}::int AS step`;
+      return result[0].step;
     } finally {
       console.log(`Completed InstanceStep.sampleTxStep ${step}!`);
     }
@@ -123,18 +123,18 @@ async function sampleWorkflow(startValue: number): Promise<number> {
     // run tx step via DBOS static method (have to specify DS name, config not type safe)
     value += await DBOS.runAsWorkflowTransaction(async () => {
       try {
-        const result = await NPGDS.client.query<StepQueryResult>(`SELECT $1::int AS step`, [i]);
-        return result.rows[0].step;
+        const result = await PGDS.client<StepQueryResult[]>`SELECT ${i}::int AS step`;
+        return result[0].step;
       } finally {
         console.log(`Completed DBOS.runAsWorkflowTransaction ${i}!`);
       }
     }, "DBOS.runAsWorkflowTransaction", { dsName: dataSource.name });
 
     // run tx step using PostgresDataSource static method (have to specify DS name, config type safe)
-    value += await NPGDS.runTxStep(async () => {
+    value += await PGDS.runTxStep(async () => {
       try {
-        const result = await NPGDS.client.query<StepQueryResult>(`SELECT $1::int AS step`, [i]);
-        return result.rows[0].step;
+        const result = await PGDS.client<StepQueryResult[]>`SELECT ${i}::int AS step`;
+        return result[0].step;
       } finally {
         console.log(`Completed PostgresDataSource.runTxStep ${i}!`);
       }
@@ -143,8 +143,8 @@ async function sampleWorkflow(startValue: number): Promise<number> {
     // run tx step using PostgresDataSource instance method (don't specify DS name, config type safe)
     value += await dataSource.runTxStep(async () => {
       try {
-        const result = await NPGDS.client.query<StepQueryResult>(`SELECT $1::int AS step`, [i]);
-        return result.rows[0].step;
+        const result = await PGDS.client<StepQueryResult[]>`SELECT ${i}::int AS step`;
+        return result[0].step;
       } finally {
         console.log(`Completed dataSource.runTxStep ${i}!`);
       }
@@ -162,10 +162,7 @@ async function sampleWorkflow(startValue: number): Promise<number> {
 // registered version of sampleWorkflow
 const registeredSampleWorkflow = DBOS.registerWorkflow(sampleWorkflow, { name: "sampleWorkflow" });
 
-async function main() {
-  // ensure the database is created and configured
-  await NPGDS.ensureDatabase(config.database, { ...config, database: "postgres" });
-  await NPGDS.configure(config);
+export async function main() {
 
   // launch DBOS
   DBOS.setConfig({ "name": "triple-helix" });
@@ -202,4 +199,3 @@ async function main() {
   }
 }
 
-main().catch(console.error);
