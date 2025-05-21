@@ -11,14 +11,14 @@ async function main() {
     const argv = process.argv.slice(2);
     const arg1 = argv.length > 0 ? argv[0] : "npg";
 
-    if (arg1 === "pg") {
-        const pg = await import("./test-postgres.ts")
-        console.log("Running test-postgres");
-        await pg.main();
-    } else if (arg1 === "npg") {
+    if (arg1 === "npg") {
         const npg = await import("./test-node-postgres.ts")
         console.log("Running test-node-postgres");
         await npg.main();
+    } else if (arg1 === "pg") {
+        const pg = await import("./test-postgres.ts")
+        console.log("Running test-postgres");
+        await pg.main();
     } else {
         console.error(`Unknown argument: ${arg1}`);
     }

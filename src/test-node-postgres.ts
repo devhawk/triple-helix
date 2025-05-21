@@ -38,7 +38,7 @@ async function sampleTxStep(step: number): Promise<number> {
 
 // registered versions of sampleStep & sampleTxStep
 const registeredSampleStep = DBOS.registerStep(sampleStep, { name: "sampleStep" });
-const registeredSampleTxStep = dataSource.register(sampleTxStep, "sampleTxStep", { isolationLevel: IsolationLevel.readUncommitted });
+const registeredSampleTxStep = dataSource.register(sampleTxStep, "sampleTxStep", { storedProc: "triple_helix_demo" });
 
 // a class to demonstrate static step and transaction functions
 class StaticStep {
@@ -66,7 +66,7 @@ class StaticStep {
 
 // register static step functions w/o decorators
 StaticStep.sampleStep = DBOS.registerStep(StaticStep.sampleStep, { name: "StaticStep.sampleStep" });
-StaticStep.sampleTxStep = dataSource.register(StaticStep.sampleTxStep, "StaticStep.sampleTxStep", { isolationLevel: IsolationLevel.readCommited });
+StaticStep.sampleTxStep = dataSource.register(StaticStep.sampleTxStep, "StaticStep.sampleTxStep", { storedProc: "triple_helix_demo" });
 
 // a class to demonstrate instance step and transaction functions
 class InstanceStep {
@@ -94,14 +94,14 @@ class InstanceStep {
 
 // register instance step functions w/o decorators
 InstanceStep.prototype.sampleStep = DBOS.registerStep(InstanceStep.prototype.sampleStep, { name: "InstanceStep.sampleStep" });
-InstanceStep.prototype.sampleTxStep = dataSource.register(InstanceStep.prototype.sampleTxStep, "InstanceStep.sampleTxStep", { isolationLevel: IsolationLevel.repeatableRead });
+InstanceStep.prototype.sampleTxStep = dataSource.register(InstanceStep.prototype.sampleTxStep, "InstanceStep.sampleTxStep", { storedProc: "triple_helix_demo" });
 
 // a sample workflow function
 async function sampleWorkflow(startValue: number): Promise<number> {
   let value = startValue;
   let instance = new InstanceStep();
 
-  for (let i = 1; i < 5; i++) {
+  for (let i = 1; i < 2; i++) {
     // run using the registered step and transaction functions
     value += await registeredSampleStep(i);
     value += await registeredSampleTxStep(i);

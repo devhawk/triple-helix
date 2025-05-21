@@ -77,11 +77,11 @@ CREATE OR REPLACE FUNCTION "triple_helix_demo_f"(
 
     function sampleTxStep(step) {
         try {
-            const result = plv8.execute("SELECT $1 AS step", [step]);
+            const result = plv8.execute("SELECT $1::int AS step", [step]);
             return result[0].step;
         }
         finally {
-            plv8.elog(INFO, "Completed sampleTxStep " + step);
+            plv8.elog(INFO, "Completed triple_helix_demo_f::sampleTxStep " + JSON.stringify(step));
         }
     }
 
@@ -91,7 +91,7 @@ CREATE OR REPLACE FUNCTION "triple_helix_demo_f"(
 
     function $run(func, args) {
         try {
-            const output = func(args);
+            const output = func(...args);
             return { output };
         } catch (e) {
             return $serialize_error(e);

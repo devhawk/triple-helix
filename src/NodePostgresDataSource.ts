@@ -17,6 +17,7 @@ type ValuesOf<T> = T[keyof T];
 type IsolationLevel = ValuesOf<typeof IsolationLevel>;
 export interface NodePostgresTransactionOptions {
     isolationLevel?: IsolationLevel;
+    storedProc?: string;
 };
 
 interface NodePostgresDataSourceContext { client: ClientBase; }
@@ -39,11 +40,11 @@ export class NodePostgresDataSource implements DBOSTransactionalDataSource {
         return ctx.client;
     }
 
-    static async runTxStep<T>(callback: () => Promise<T>, funcName: string, options: { dsName?: string, config?: NodePostgresTransactionOptions } = {}) {
+    static async runTxStep<T>(callback: () => Promise<T>, funcName: string, options: { dsName?: string, config?: Omit<NodePostgresTransactionOptions, 'storedProc'> } = {}) {
         return await DBOS.runAsWorkflowTransaction(callback, funcName, options);
     }
 
-    async runTxStep<T>(callback: () => Promise<T>, funcName: string, config?: NodePostgresTransactionOptions) {
+    async runTxStep<T>(callback: () => Promise<T>, funcName: string, config?: Omit<NodePostgresTransactionOptions, 'storedProc'>) {
         return await DBOS.runAsWorkflowTransaction(callback, funcName, { dsName: this.name, config });
     }
 
@@ -75,7 +76,77 @@ export class NodePostgresDataSource implements DBOSTransactionalDataSource {
         if (!workflowID) { throw new Error("Workflow ID is not set."); }
         if (!functionNum) { throw new Error("Function Number is not set."); }
 
-        return runLocal(this.#pool, () => func.call(target, ...args), workflowID, functionNum, config.isolationLevel);
+        if (config.storedProc) {
+            return this.#runRemote<Return>(config.storedProc, args, workflowID, functionNum);
+        } else {
+            return this.#runLocal(() => func.call(target, ...args), workflowID, functionNum, config.isolationLevel);
+        }
+    }
+
+    async #runLocal<Return>(func: () => Promise<Return>, workflowID: string, functionNum: number, isolationLevel?: IsolationLevel): Promise<Return> {
+        const $isolationLevel = isolationLevel ? /*sql*/`ISOLATION LEVEL ${isolationLevel}` : "";
+
+        while (true) {
+            const { rows } = await this.#pool.query<{ output: string }>(/*sql*/
+                `SELECT output FROM dbos.transaction_outputs
+                 WHERE workflow_id = $1 AND function_num = $2`,
+                [workflowID, functionNum]);
+            if (rows.length > 0) {
+                return JSON.parse(rows[0].output) as Return;
+            }
+
+            const client = await this.#pool.connect();
+            try {
+                await client.query(/*sql*/`BEGIN ${$isolationLevel}`);
+
+                const output = await asyncLocalCtx.run({ client }, func);
+
+                try {
+                    await client.query(/*sql*/
+                        `INSERT INTO dbos.transaction_outputs (workflow_id, function_num, output) VALUES ($1, $2, $3)`,
+                        [workflowID, functionNum, JSON.stringify(output)]);
+                } catch (error) {
+                    // 23505 is a duplicate key error 
+                    if (error instanceof DatabaseError && error.code === "23505") {
+                        await client.query(/*sql*/`ROLLBACK`);
+                        continue;
+                    } else {
+                        throw error;
+                    }
+                }
+
+                await client.query(/*sql*/`COMMIT`);
+                return output;
+            } catch (error) {
+                await client.query(/*sql*/`ROLLBACK`);
+                throw error;
+            } finally {
+                client.release();
+            }
+        }
+    }
+
+    async #runRemote<Return>(name: string, args: unknown[], workflowID: string, functionNum: number): Promise<Return> {
+
+        const context = {};
+        const $args = [workflowID, functionNum, JSON.stringify(args), context, null]
+        const sql = `CALL "${name}_p"(${$args.map((_v, i) => `$${i + 1}`).join()});`;
+        const client = await this.#pool.connect();
+        try {
+            client.on('notice', logNotice);
+
+            type QueryResult = { return_value: { output?: Return; error?: Error; } };
+            const [{ return_value }] = await client.query<QueryResult>(sql, $args).then((value) => value.rows);
+            const { output, error } = return_value;
+            if (error) {
+                throw new Error(error.message, { cause: error.cause });
+            } else {
+                return output!;
+            }
+        } finally {
+            client.off('notice', logNotice);
+            client.release();
+        }
     }
 
     static async ensureDatabase(name: string, config: ClientConfig): Promise<void> {
@@ -106,49 +177,6 @@ export class NodePostgresDataSource implements DBOSTransactionalDataSource {
     }
 }
 
-async function runLocal<Return>(pool: Pool, func: () => Promise<Return>, workflowID: string, functionNum: number, isolationLevel?: IsolationLevel) {
-    const $isolationLevel = isolationLevel ? /*sql*/`ISOLATION LEVEL ${isolationLevel}` : "";
-
-    while (true) {
-        const { rows } = await pool.query<{ output: string }>(/*sql*/
-            `SELECT output FROM dbos.transaction_outputs
-             WHERE workflow_id = $1 AND function_num = $2`,
-            [workflowID, functionNum]);
-        if (rows.length > 0) {
-            return JSON.parse(rows[0].output) as Return;
-        }
-
-        const client = await pool.connect();
-        try {
-            await client.query(/*sql*/`BEGIN ${$isolationLevel}`);
-
-            const output = await asyncLocalCtx.run({ client }, func);
-
-            try {
-                await client.query(/*sql*/
-                    `INSERT INTO dbos.transaction_outputs (workflow_id, function_num, output) VALUES ($1, $2, $3)`,
-                    [workflowID, functionNum, JSON.stringify(output)]);
-            } catch (error) {
-                // 23505 is a duplicate key error 
-                if (error instanceof DatabaseError && error.code === "23505") {
-                    await client.query(/*sql*/`ROLLBACK`);
-                    continue;
-                } else {
-                    throw error;
-                }
-            }
-
-            await client.query(/*sql*/`COMMIT`);
-            return output;
-        } catch (error) {
-            await client.query(/*sql*/`ROLLBACK`);
-            throw error;
-        } finally {
-            client.release();
-        }
-    }
-}
-
 function logNotice(msg: NoticeMessage) {
     switch (msg.severity) {
         case 'INFO':
@@ -169,18 +197,6 @@ function logNotice(msg: NoticeMessage) {
             break;
         default:
             DBOS.logger.error(`Unknown notice severity: ${msg.severity} - ${msg.message}`);
-    }
-}
-
-async function runRemote<R extends QueryResultRow = any>(pool: Pool, name: string, args: unknown[]) {
-    const sql = `CALL "${name}"(${args.map((_v, i) => `$${i + 1}`).join()});`;
-    const client = await pool.connect();
-    try {
-        client.on('notice', logNotice);
-        return await client.query<R>(sql, args).then((value) => value.rows);
-    } finally {
-        client.off('notice', logNotice);
-        client.release();
     }
 }
 
