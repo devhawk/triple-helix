@@ -14,6 +14,7 @@
   "dependencies": {
     "@dbos-inc/dbos-sdk": "file:../../ts-transact",
     "pg": "^8.16.0",
+    "pg-protocol": "^1.10.0",
     "postgres": "^3.4.5"
   }
 }

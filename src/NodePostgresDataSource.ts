@@ -1,8 +1,9 @@
 // using https://github.com/brianc/node-postgres
 
 import { DBOS, type DBOSTransactionalDataSource } from "@dbos-inc/dbos-sdk";
-import { Client, type ClientBase, type ClientConfig, DatabaseError, Pool, type PoolConfig } from "pg";
+import { Client, type ClientBase, type ClientConfig, DatabaseError, Pool, type PoolConfig, QueryResultRow } from "pg";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { NoticeMessage } from "pg-protocol/dist/messages.js";
 
 export const IsolationLevel = Object.freeze({
     serializable: 'SERIALIZABLE',
@@ -145,6 +146,41 @@ async function runLocal<Return>(pool: Pool, func: () => Promise<Return>, workflo
         } finally {
             client.release();
         }
+    }
+}
+
+function logNotice(msg: NoticeMessage) {
+    switch (msg.severity) {
+        case 'INFO':
+        case 'LOG':
+        case 'NOTICE':
+            DBOS.logger.info(msg.message);
+            break;
+        case 'WARNING':
+            DBOS.logger.warn(msg.message);
+            break;
+        case 'DEBUG':
+            DBOS.logger.debug(msg.message);
+            break;
+        case 'ERROR':
+        case 'FATAL':
+        case 'PANIC':
+            DBOS.logger.error(msg.message);
+            break;
+        default:
+            DBOS.logger.error(`Unknown notice severity: ${msg.severity} - ${msg.message}`);
+    }
+}
+
+async function runRemote<R extends QueryResultRow = any>(pool: Pool, name: string, args: unknown[]) {
+    const sql = `CALL "${name}"(${args.map((_v, i) => `$${i + 1}`).join()});`;
+    const client = await pool.connect();
+    try {
+        client.on('notice', logNotice);
+        return await client.query<R>(sql, args).then((value) => value.rows);
+    } finally {
+        client.off('notice', logNotice);
+        client.release();
     }
 }
 
