@@ -22,7 +22,7 @@ async function sampleStep(step: number): Promise<number> {
     await sleep(1000);
     return step;
   } finally {
-    console.log(`Completed sampleStep ${step}!`);
+    DBOS.logger.info(`Completed sampleStep ${step}!`);
   }
 }
 
@@ -32,7 +32,7 @@ async function sampleTxStep(step: number): Promise<number> {
     const result = await PGDS.client<StepQueryResult[]>`SELECT ${step}::int AS step`;
     return result[0].step;
   } finally {
-    console.log(`Completed sampleTxStep ${step}!`);
+    DBOS.logger.info(`Completed sampleTxStep ${step}!`);
   }
 }
 
@@ -49,7 +49,7 @@ class StaticStep {
       await sleep(1000);
       return step;
     } finally {
-      console.log(`Completed StaticStep.sampleStep ${step}!`);
+      DBOS.logger.info(`Completed StaticStep.sampleStep ${step}!`);
     }
   }
 
@@ -59,7 +59,7 @@ class StaticStep {
       const result = await PGDS.client<StepQueryResult[]>`SELECT ${step}::int AS step`;
       return result[0].step;
     } finally {
-      console.log(`Completed StaticStep.sampleTxStep ${step}!`);
+      DBOS.logger.info(`Completed StaticStep.sampleTxStep ${step}!`);
     }
   }
 }
@@ -77,7 +77,7 @@ class InstanceStep {
       await sleep(1000);
       return step;
     } finally {
-      console.log(`Completed InstanceStep.sampleStep ${step}!`);
+      DBOS.logger.info(`Completed InstanceStep.sampleStep ${step}!`);
     }
   }
 
@@ -87,7 +87,7 @@ class InstanceStep {
       const result = await PGDS.client<StepQueryResult[]>`SELECT ${step}::int AS step`;
       return result[0].step;
     } finally {
-      console.log(`Completed InstanceStep.sampleTxStep ${step}!`);
+      DBOS.logger.info(`Completed InstanceStep.sampleTxStep ${step}!`);
     }
   }
 }
@@ -116,7 +116,7 @@ async function sampleWorkflow(startValue: number): Promise<number> {
         await sleep(1000);
         return i;
       } finally {
-        console.log(`Completed DBOS.runAsWorkflowStep ${i}!`);
+        DBOS.logger.info(`Completed DBOS.runAsWorkflowStep ${i}!`);
       }
     }, "DBOS.runAsWorkflowStep");
 
@@ -126,7 +126,7 @@ async function sampleWorkflow(startValue: number): Promise<number> {
         const result = await PGDS.client<StepQueryResult[]>`SELECT ${i}::int AS step`;
         return result[0].step;
       } finally {
-        console.log(`Completed DBOS.runAsWorkflowTransaction ${i}!`);
+        DBOS.logger.info(`Completed DBOS.runAsWorkflowTransaction ${i}!`);
       }
     }, "DBOS.runAsWorkflowTransaction", { dsName: dataSource.name });
 
@@ -136,7 +136,7 @@ async function sampleWorkflow(startValue: number): Promise<number> {
         const result = await PGDS.client<StepQueryResult[]>`SELECT ${i}::int AS step`;
         return result[0].step;
       } finally {
-        console.log(`Completed PostgresDataSource.runTxStep ${i}!`);
+        DBOS.logger.info(`Completed PostgresDataSource.runTxStep ${i}!`);
       }
     }, "PostgresDataSource.runTxStep", { dsName: dataSource.name });
 
@@ -146,7 +146,7 @@ async function sampleWorkflow(startValue: number): Promise<number> {
         const result = await PGDS.client<StepQueryResult[]>`SELECT ${i}::int AS step`;
         return result[0].step;
       } finally {
-        console.log(`Completed dataSource.runTxStep ${i}!`);
+        DBOS.logger.info(`Completed dataSource.runTxStep ${i}!`);
       }
     }, "dataSource.runTxStep", { isolationLevel: IsolationLevel.serializable });
 
@@ -154,8 +154,8 @@ async function sampleWorkflow(startValue: number): Promise<number> {
     await DBOS.setEvent(stepsEvent, i);
   }
 
-  console.log(`StaticStep count: ${StaticStep.count}`);
-  console.log(`InstanceStep count: ${instance.count}`);
+  DBOS.logger.info(`StaticStep count: ${StaticStep.count}`);
+  DBOS.logger.info(`InstanceStep count: ${instance.count}`);
   return value;
 }
 
@@ -178,13 +178,13 @@ export async function main() {
     while (true) {
       const status = (await handle.getStatus())?.status;
       if (status === "SUCCESS" || status === "ERROR") {
-        console.log(`Workflow status: ${status}`);
+        DBOS.logger.info(`Workflow status: ${status}`);
         break;
       }
 
       const event = await DBOS.getEvent<number>(workflowID, stepsEvent, 1);
       if (event && event !== prevStep) {
-        console.log(`Workflow event: ${event}`);
+        DBOS.logger.info(`Workflow event: ${event}`);
         prevStep = event;
       } else {
         await sleep(500);
@@ -193,7 +193,7 @@ export async function main() {
 
     // getting the workflow result should be a no-op since the workflow is already completed
     const result = await handle.getResult();
-    console.log(`Workflow completed with result: ${result}`);
+    DBOS.logger.info(`Workflow completed with result: ${result}`);
   } finally {
     await DBOS.shutdown();
   }
